@@ -1,6 +1,3 @@
-import json
-
-
 class FollowerCache:
     def __init__(self, data, users):
         if data:
@@ -62,4 +59,4 @@ class FollowerCache:
             users = list(set(obj2.users) - set(obj1.users))
 
         for username in users:
-            print(username + " >> " + ((username in obj2.users) and "Followed" or "Unfollowed"))
+            print(username + " >> " + ((username in obj2.users) and "Bekövetett" or "Kikövetett"))

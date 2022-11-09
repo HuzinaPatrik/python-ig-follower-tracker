@@ -1,39 +1,85 @@
 import io
+import os
 import json
 from FollowerCache import FollowerCache
 from instagrapi import Client
+import time
 
-cl = Client()
-cl.load_settings('tmp/dump.json')
-cl.login("username", "password", True, "2fa")
-user_id = cl.user_id_from_username("username")
+userDetails = {
+    'request2FA': False,
+    'username': "",
+    'password': "",
+}
 
-#TODO: First usenál nézze meg létezik-e a fájl, ha létezik töltse be ha nem hozza létre és a fájlt resettelje ha nem tud beloginolni.
+loginStatus = False
 
-def compareToOld():
-    users = []
+def callAPI(refreshMinutes):
+    global code, loginStatus
+
+    if userDetails['request2FA']:
+        code = input("Gépeld be kérlek a 2FA Kódot!")
 
     try:
-        file = open('followers.json')
+        cl = Client()
+        path = "tmp/" + userDetails['username'] + "-dump.json"
+        if os.path.exists(path):
+            cl.load_settings(path)
 
-        users = json.load(file)
-    except:
-        break
+        if not loginStatus:
+            cl.login(userDetails['username'], userDetails['password'], False, code)
+            loginStatus = True
+        else:
+            with open(path, 'r') as json_file:
+                json_data = json.load(json_file)
+                cl.login_by_sessionid(json_data['client_session_id'])
+
+        user_id = cl.user_id_from_username(userDetails['username'])
+
+        if not os.path.exists(path):
+            cl.dump_settings(path)
+
+        def compareToOld():
+            users = []
+
+            file = open('followers.json')
+
+            users = json.load(file)
 
 
-    currentCache = FollowerCache(False, users)
+            currentCache = FollowerCache(False, users)
 
-    return currentCache
+            return currentCache
 
-followers = cl.user_followers(user_id, True, 0)
-cache = FollowerCache(str(followers), False)
-users = cache.getUsers()
+        followers = cl.user_followers(user_id, True, 0)
+        cache = FollowerCache(str(followers), False)
+        users = cache.getUsers()
+        cache.outputUsers()
 
-oldCache = compareToOld()
-FollowerCache.outputDifference(oldCache, cache)
+        print("==================================================")
+        print("Differences: ")
 
+        oldCache = compareToOld()
+        FollowerCache.outputDifference(oldCache, cache)
+        print("==================================================")
 
+        with io.open("followers.json", "w", encoding="utf-8") as file:
+            file.write(json.dumps(users))
 
-#TODO: x időnként kérje le a followereket és ha lekérte akkor checkelje, hogy az oldFollowerek között mi a változás, ha van.
-with io.open("followers.json", "w", encoding="utf-8") as file:
-    file.write(json.dumps(users))
+        cl.logout()
+    except Exception as e:
+        print(e)
+        print("API Hiba!")
+        loginStatus = False
+        callAPI(refreshMinutes)
+
+    time.sleep(refreshMinutes * 60)
+    callAPI(refreshMinutes)
+
+global refreshMinutes
+
+try:
+    refreshMinutes = float(input("Milyen gyakorisággal frissüljön az API?"))
+except:
+    print("Hiba!")
+
+callAPI(refreshMinutes)
